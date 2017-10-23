@@ -70,13 +70,13 @@ namespace Networking {
                 byte[] bytes = new byte[ 4096 ];
                 bytes = _socket.Receive( ref newClient );
 
-                Packet p = new Packet( new List<byte>( bytes ).GetRange( 0, length ) );
+                Packet p = new Packet( bytes );
                 if ( p.Type.Name.ToLower() != "login" ) {
                     Console.WriteLine( $"Invalid packet type received: \"{p.Type.Name}\". Expected type: \"Login\"." );
                     return;
                 }
                 
-                ClientConnectionRequested?.Invoke(  );
+                //ClientConnectionRequested?.Invoke(  );
             }
         }
 

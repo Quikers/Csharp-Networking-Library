@@ -4,9 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Csharp_Networking_Library
-{
-    public class Class1
-    {
+namespace Networking {
+    public class Class1 {
     }
 }

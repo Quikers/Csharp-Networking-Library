@@ -8,7 +8,7 @@ namespace Networking {
 
     #region Event Handlers
 
-    public delegate void UdpDataEventHandler( UdpSocket socket, Packet packet );
+    public delegate void DataEventHandler( UdpSocket socket, Packet packet );
     public delegate void TcpDataEventHandler( TcpSocket socket, Packet packet );
 
     #endregion

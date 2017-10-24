@@ -9,9 +9,9 @@ namespace Networking {
     #region Event Handlers
 
     public delegate void TcpSocketEventHandler( TcpSocket socket );
-    public delegate void UdpSocketEventHandler( UdpSocket socket );
+    public delegate void SocketEventHandler( UdpSocket socket );
     public delegate void TcpSocketErrorEventHandler( TcpSocket socket, Exception ex );
-    public delegate void UdpSocketErrorEventHandler( UdpSocket socket, Exception ex );
+    public delegate void SocketErrorEventHandler( UdpSocket socket, Exception ex );
 
     #endregion
 

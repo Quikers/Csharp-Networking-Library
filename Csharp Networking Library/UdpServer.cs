@@ -7,12 +7,13 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Networking {
+
     class UdpServer {
 
         #region Events
 
-        public event UdpSocketEventHandler ClientConnectionRequested;
-        public event UdpDataEventHandler PacketReceived;
+        public event SocketEventHandler ClientConnectionRequested;
+        public event DataEventHandler PacketReceived;
 
         #endregion
 
@@ -35,7 +36,7 @@ namespace Networking {
         /// </summary>
         /// <param name="port">The local port to listen to</param>
         /// <param name="callback">The method to call if a client has been found</param>
-        public UdpServer( int port, UdpSocketEventHandler callback ) {
+        public UdpServer( int port, SocketEventHandler callback ) {
             _socket = new UdpClient( port );
 
             ClientConnectionRequested += callback;
@@ -48,7 +49,7 @@ namespace Networking {
         /// <param name="ip">The local IP to listen to</param>
         /// <param name="port">The local port to listen to</param>
         /// <param name="callback">The method to call if a client has been found</param>
-        public UdpServer( string ip, int port, UdpSocketEventHandler callback ) {
+        public UdpServer( string ip, int port, SocketEventHandler callback ) {
             if ( !IPAddress.TryParse( ip, out IPAddress tmp ) )
                 throw new InvalidCastException( $"Could not parse \"{ip}\" to a valid IP address" );
 
@@ -83,4 +84,5 @@ namespace Networking {
         #endregion
 
     }
+
 }

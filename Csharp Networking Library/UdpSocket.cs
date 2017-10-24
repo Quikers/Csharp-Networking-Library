@@ -12,24 +12,23 @@ namespace Networking {
 
         #region Events
 
-        public event UdpSocketEventHandler ConnectionSuccessful;
-        public event UdpSocketErrorEventHandler ConnectionFailed;
-        public event UdpSocketErrorEventHandler ConnectionLost;
-        public event UdpDataEventHandler DataReceived;
-        public event UdpDataEventHandler DataSent;
+        public event SocketEventHandler ConnectionSuccessful;
+        public event SocketErrorEventHandler ConnectionFailed;
+        public event SocketErrorEventHandler ConnectionLost;
+        public event DataEventHandler DataReceived;
+        public event DataEventHandler DataSent;
 
         #endregion
 
         #region Local Variables
 
-        private UdpClient _socket = new UdpClient();
-        private IPEndPoint _serverEP;
-        public bool Connected;
+        private Socket _listener;
+        public Socket Client;
 
-        public int LocalPort { get { try { return int.Parse( _socket.Client.LocalEndPoint.ToString().Split( ':' )[ 1 ] ); } catch ( Exception ) { return 0; } } }
-        public IPAddress LocalIP { get { try { return IPAddress.Parse( _socket.Client.LocalEndPoint.ToString().Split( ':' )[ 0 ] ); } catch ( Exception ) { return null; } } }
-        public EndPoint LocalEndPoint { get { try { return _socket.Client.LocalEndPoint; } catch ( Exception ) { return null; } } }
-        public EndPoint RemoteEndPoint { get { try { return _socket.Client.RemoteEndPoint; } catch ( Exception ) { return null; } } }
+        public EndPoint LocalEndPoint { get { try { return Client.LocalEndPoint; } catch ( Exception ) { return null; } } }
+        public EndPoint RemoteEndPoint { get { try { return Client.RemoteEndPoint; } catch ( Exception ) { return null; } } }
+
+        public bool Connected;
 
         #endregion
 
@@ -38,16 +37,33 @@ namespace Networking {
         /// <summary>
         /// Creates a new instance of the <see cref="UdpSocket"/> class.
         /// </summary>
-        public UdpSocket() { }
+        public UdpSocket() {
+            // Initialize both client and listener sockets
+            Client = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp ) { ExclusiveAddressUse = false, EnableBroadcast = true };
+            _listener = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp ) { ExclusiveAddressUse = false, EnableBroadcast = true };
+        }
 
         /// <summary>
         /// Creates a new instance of the <see cref="UdpSocket"/> class and automatically connects it to the given IP and port.
         /// </summary>
-        public UdpSocket( string hostname, int port ) => Connect( hostname, port );
+        public UdpSocket( string hostname, int port ) {
+            // Initialize both client and listener sockets
+            Client = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp ) { ExclusiveAddressUse = false, EnableBroadcast = true };
+            _listener = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp ) { ExclusiveAddressUse = false, EnableBroadcast = true };
+
+            Connect( hostname, port );
+        }
+
         /// <summary>
-        /// Converts a <see cref="UdpClient"/> to a <see cref="UdpSocket"/>.
+        /// Converts an <see cref="EndPoint"/> to a <see cref="UdpSocket"/>.
         /// </summary>
-        public UdpSocket( UdpClient socket ) { _socket = socket; }
+        public UdpSocket( EndPoint newEP ) {
+            // Initialize both client and listener sockets
+            Client = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp ) { ExclusiveAddressUse = false, EnableBroadcast = true };
+            _listener = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp ) { ExclusiveAddressUse = false, EnableBroadcast = true };
+
+            Connect( newEP );
+        }
 
         #endregion
 
@@ -64,28 +80,13 @@ namespace Networking {
             if ( ip == null )
                 throw new Exception( "Could not resolve hostname \"" + hostname + "\"" );
 
-            _serverEP = new IPEndPoint( ip, port );
-            Send( new Login {
-                Username = "UNKNOWN",
-                LocalEndPoint = new IPEndPoint( IPAddress.Parse( LocalEndPoint.ToString().Split( ':' )[ 0 ] ), int.Parse( LocalEndPoint.ToString().Split( ':' )[ 1 ] ) ),
-                RemoteEndPoint = new IPEndPoint( IPAddress.Parse( RemoteEndPoint.ToString().Split( ':' )[ 0 ] ), int.Parse( RemoteEndPoint.ToString().Split( ':' )[ 1 ] ) )
-            } );
-
-            Packet p = ReceiveOnce();
-            if ( p.Type.Name.ToLower() != "command" ) {
-                Connect( hostname, port );
-                return;
-            }
-
-            if ( !p.TryDeserializePacket( out Command cmd ) )
-                throw new InvalidCastException( "Could not convert packet of type \"{p.Type.Name}\", was the packet corrupted?" );
-
-            if ( cmd.Type == CommandType.UsernameTaken ) {
-                Console.WriteLine( "Could not connect to the server: Username was already taken." );
-                return;
-            }
-
-            Connected = true;
+            Connect( new IPEndPoint( ip, port ) );
+        }
+        public void Connect( EndPoint hostEndPoint ) {
+            // Prepare for connections to the server
+            Client.Connect( hostEndPoint );
+            // Start listening to the newly created connection the the server
+            _listener.Bind( Client.LocalEndPoint );
         }
 
         public void Close() { Close( true ); }
@@ -101,7 +102,6 @@ namespace Networking {
         #region Packet Traffic Methods
 
         public void Send( object data ) { Send( new Packet( data ) ); }
-
         public void Send( Packet data ) {
             if ( !Connected )
                 return;
@@ -109,8 +109,10 @@ namespace Networking {
             Task.Run( // Initiate the sender thread
                 () => {
                     try {
-                        byte[] buffer = data.SerializePacket();
-                        _socket.Send( buffer, buffer.Length, _serverEP );
+                        Client.SendTo( data.SerializePacket(), LocalEndPoint );
+
+                        // Strictly for debugging the sent messages
+                        Console.WriteLine( $"SENT \"{data.Content}\" TO {LocalEndPoint}" );
 
                         DataSent?.Invoke( this, data );
                     } catch ( Exception ex ) {
@@ -120,7 +122,8 @@ namespace Networking {
             );
         }
 
-        public void Receive( int bufferSize = 128 ) {
+        public void Receive() => Receive( 4096 );
+        public void Receive( int bufferSize ) {
             if ( !Connected )
                 return;
 
@@ -142,7 +145,8 @@ namespace Networking {
             );
         }
 
-        public bool TryReceiveOnce( out Packet packet, int bufferSize = 4096 ) {
+        public bool TryReceiveOnce( out Packet packet ) => TryReceiveOnce( out packet, 4096 );
+        public bool TryReceiveOnce( out Packet packet, int bufferSize ) {
             packet = default( Packet );
             try {
                 packet = ReceiveOnce( bufferSize );
@@ -150,12 +154,32 @@ namespace Networking {
             } catch ( Exception ) { return false; }
         }
 
-        public Packet ReceiveOnce( int bufferSize = 4096 ) {
+        public Packet ReceiveOnce() => ReceiveOnce( 4096 );
+        public Packet ReceiveOnce( int bufferSize ) {
             if ( !Connected )
                 return null;
 
-            byte[] bytes = _socket.Receive( ref _serverEP );
-            return new Packet( bytes );
+            // Create a temp EndPoint to store the sender's connection information in
+            EndPoint tmp = new IPEndPoint( IPAddress.Any, 0 );
+            // Create a temp buffer to store the message in
+            byte[] buffer = new byte[ bufferSize ];
+            // Receive the message and take the actual length of the message (not the whole 4096 bytes)
+            int length = _listener.ReceiveFrom( buffer, ref tmp );
+
+            // Convert and store the message in a variable
+            Packet p = new Packet( buffer.ToList().GetRange( 0, length ).ToArray() );
+
+            // Strictly for debugging the received messages
+            if ( p.Type.Name.ToLower() != "string" )
+                return null;
+
+            Console.WriteLine( $"RECV \"{p.Content}\" FROM {tmp}" );
+
+            // If the message was a PING, send a PONG back
+            if ( p.Content.ToString() == "PING" )
+                Send( "PONG" );
+
+            return p;
         }
 
         #endregion
@@ -169,4 +193,5 @@ namespace Networking {
         #endregion
 
     }
+
 }

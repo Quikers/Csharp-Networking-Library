@@ -24,6 +24,7 @@ namespace Networking {
 
         public Type Type { get { try { return Content.GetType(); } catch ( Exception ) { return null; } } }
         public object Content;
+        public byte[] Serialized { get => SerializePacket(); }
 
         #endregion
 
@@ -42,7 +43,15 @@ namespace Networking {
         /// Create a <see cref="Packet"/> from a <see cref="byte"/> array.
         /// </summary>
         /// <param name="bytes">The <see cref="byte"/> array to convert from</param>
-        public Packet( IEnumerable<byte> bytes ) { Content = Deserialize( bytes ); ParseFailed += ParseFailedMessage; }
+        public Packet( IEnumerable<byte> bytes ) {
+            ParseFailed += ParseFailedMessage;
+
+            try {
+                Content = Deserialize( bytes );
+            } catch ( Exception ) {
+                ParseFailed?.Invoke( this );
+            }
+        }
 
         #endregion
 

@@ -7,80 +7,103 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Networking {
-    class UdpServer {
+
+    public class UdpServer {
 
         #region Events
 
-        public event UdpSocketEventHandler ClientConnectionRequested;
-        public event UdpDataEventHandler PacketReceived;
+        public event SocketEventHandler ClientConnectionRequested;
+        public event DataEventHandler ReceivedPacket;
 
         #endregion
 
         #region Local Variables
 
-        private UdpClient _socket;
-        public bool ServerActive;
+        public List<UdpSocket> Clients = new List<UdpSocket>();
+        public EndPoint LocalEndPoint { get { try { return _listener.LocalEndPoint; } catch ( Exception ) { return null; } } }
+        public EndPoint RemoteEndPoint { get { try { return _listener.RemoteEndPoint; } catch ( Exception ) { return null; } } }
 
-        public int Port { get { try { return int.Parse( _socket.Client.LocalEndPoint.ToString().Split( ':' )[ 1 ] ); } catch ( Exception ) { return 0; } } }
-        public IPAddress IP { get { try { return IPAddress.Parse( _socket.Client.LocalEndPoint.ToString().Split( ':' )[ 0 ] ); } catch ( Exception ) { return null; } } }
-        public EndPoint LocalEndPoint => _socket.Client.LocalEndPoint;
-        public EndPoint RemoteEndPoint => _socket.Client.RemoteEndPoint;
+        private Socket _listener;
+        public bool Active;
 
         #endregion
 
         #region Constructors
-        
+
         /// <summary>
         /// Initializes the UDP server and automatically starts waiting for connections on all available local IP addresses.
         /// </summary>
         /// <param name="port">The local port to listen to</param>
-        /// <param name="callback">The method to call if a client has been found</param>
-        public UdpServer( int port, UdpSocketEventHandler callback ) {
-            _socket = new UdpClient( port );
+        /// <param name="newClientCallback">The method to call if a client has been found</param>
+        /// <param name="receivedPacketCallback">The method to call if a new packet has been received</param>
+        public UdpServer( int port, SocketEventHandler newClientCallback, DataEventHandler receivedPacketCallback ) {
+            // Initialize the listener socket
+            _listener = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp ) { ExclusiveAddressUse = false, EnableBroadcast = true };
+            // Start listening to any connection made to the specified port
+            _listener.Bind( new IPEndPoint( IPAddress.Any, port ) );
 
-            ClientConnectionRequested += callback;
-            BeginAccepting();
+            ClientConnectionRequested += newClientCallback;
+            ReceivedPacket += receivedPacketCallback;
+
+            Active = true;
+            Receive();
         }
 
         /// <summary>
         /// Initializes the UDP server and automatically starts waiting for connections.
         /// </summary>
-        /// <param name="ip">The local IP to listen to</param>
+        /// <param name="hostname">The local IP to listen to</param>
         /// <param name="port">The local port to listen to</param>
-        /// <param name="callback">The method to call if a client has been found</param>
-        public UdpServer( string ip, int port, UdpSocketEventHandler callback ) {
-            if ( !IPAddress.TryParse( ip, out IPAddress tmp ) )
-                throw new InvalidCastException( $"Could not parse \"{ip}\" to a valid IP address" );
+        /// <param name="newClientCallback">The method to call if a client has been found</param>
+        /// <param name="receivedPacketCallback">The method to call if a new packet has been received</param>
+        public UdpServer( string hostname, int port, SocketEventHandler newClientCallback, DataEventHandler receivedPacketCallback ) {
+            if ( !IPAddress.TryParse( hostname, out IPAddress ip ) )
+                throw new InvalidCastException( $"Could not convert {hostname} to a valid IPAddress instance." );
 
-            _socket = new UdpClient( new IPEndPoint( tmp, port ) );
+            // Initialize the listener socket
+            _listener = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp ) { ExclusiveAddressUse = false, EnableBroadcast = true };
+            // Start listening to the specified IP and port
+            _listener.Bind( new IPEndPoint( ip, port ) );
 
-            ClientConnectionRequested += callback;
-            BeginAccepting();
+            ClientConnectionRequested += newClientCallback;
+            ReceivedPacket += receivedPacketCallback;
+
+            Receive();
         }
 
         #endregion
 
         #region Methods
 
-        private void BeginAccepting() {
-            ServerActive = true;
+        private void Receive() {
+            Active = true;
 
-            while ( ServerActive ) {
-                IPEndPoint newClient = new IPEndPoint( IPAddress.Any, 0 );
-                byte[] bytes = new byte[ 4096 ];
-                bytes = _socket.Receive( ref newClient );
+            Task.Run( () => {
+                while ( Active ) {
+                    EndPoint newClient = new IPEndPoint( IPAddress.Any, 0 );
+                    byte[] bytes = new byte[ 4096 ];
+                    int length = _listener.ReceiveFrom( bytes, ref newClient );
 
-                Packet p = new Packet( bytes );
-                if ( p.Type.Name.ToLower() != "login" ) {
-                    Console.WriteLine( $"Invalid packet type received: \"{p.Type.Name}\". Expected type: \"Login\"." );
-                    return;
+                    Packet p = new Packet( bytes.ToList().GetRange( 0, length ) );
+                    UdpSocket user = new UdpSocket( newClient );
+
+                    if ( Clients.Where( c => c.RemoteEndPoint.ToString() == newClient.ToString() ).ToList().Count == 0 ) {
+                        Clients.Add( user );
+                        ClientConnectionRequested?.Invoke( user );
+                    }
+
+                    ReceivedPacket?.Invoke( user, p );
                 }
-                
-                //ClientConnectionRequested?.Invoke(  );
-            }
+            } );
+        }
+
+        public void Stop() {
+            Active = false;
+            _listener.Close();
         }
 
         #endregion
 
     }
+
 }

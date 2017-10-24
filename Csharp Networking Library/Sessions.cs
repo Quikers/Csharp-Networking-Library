@@ -39,8 +39,12 @@ namespace Networking {
         }
 
         public void Broadcast( Packet packet ) {
-            foreach ( User user in UserList.ToList().Where( u => u.ConnectionInfo != null && u.ConnectionInfo.Connected ) )
-                user.ConnectionInfo.Send( packet );
+            foreach ( User user in UserList.ToList().Where( u => u.TcpConnectionInfo != null && u.TcpConnectionInfo.Connected || u.UdpConnectionInfo != null && u.UdpConnectionInfo.Connected ) ) {
+                if ( user.TcpConnectionInfo != null && user.TcpConnectionInfo.Connected )
+                    user.TcpConnectionInfo.Send( packet );
+                if ( user.UdpConnectionInfo != null && user.UdpConnectionInfo.Connected )
+                    user.UdpConnectionInfo.Send( packet );
+            }
         }
 
     }

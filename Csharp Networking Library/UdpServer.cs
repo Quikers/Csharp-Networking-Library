@@ -97,6 +97,9 @@ namespace Networking {
             } );
         }
 
+        public void Broadcast( object data ) => Broadcast( new Packet( data ) );
+        public void Broadcast( Packet data ) => Clients.ToList().ForEach( c => c.Send( data ) );
+
         public void Stop() {
             Active = false;
             _listener.Close();

@@ -13,7 +13,7 @@ namespace Networking {
         #region Events
 
         public event SocketEventHandler ClientConnectionRequested;
-        public event DataEventHandler ReceivedPacket;
+        public event DataEventHandler DataReceived;
 
         #endregion
 
@@ -35,15 +35,15 @@ namespace Networking {
         /// </summary>
         /// <param name="port">The local port to listen to</param>
         /// <param name="newClientCallback">The method to call if a client has been found</param>
-        /// <param name="receivedPacketCallback">The method to call if a new packet has been received</param>
-        public UdpServer( int port, SocketEventHandler newClientCallback, DataEventHandler receivedPacketCallback ) {
+        /// <param name="dataReceivedCallback">The method to call if a new packet has been received</param>
+        public UdpServer( int port, SocketEventHandler newClientCallback, DataEventHandler dataReceivedCallback ) {
             // Initialize the listener socket
             _listener = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp ) { ExclusiveAddressUse = false, EnableBroadcast = true };
             // Start listening to any connection made to the specified port
             _listener.Bind( new IPEndPoint( IPAddress.Any, port ) );
 
             ClientConnectionRequested += newClientCallback;
-            ReceivedPacket += receivedPacketCallback;
+            DataReceived += dataReceivedCallback;
 
             Active = true;
             Receive();
@@ -55,8 +55,8 @@ namespace Networking {
         /// <param name="hostname">The local IP to listen to</param>
         /// <param name="port">The local port to listen to</param>
         /// <param name="newClientCallback">The method to call if a client has been found</param>
-        /// <param name="receivedPacketCallback">The method to call if a new packet has been received</param>
-        public UdpServer( string hostname, int port, SocketEventHandler newClientCallback, DataEventHandler receivedPacketCallback ) {
+        /// <param name="dataReceivedCallback">The method to call if a new packet has been received</param>
+        public UdpServer( string hostname, int port, SocketEventHandler newClientCallback, DataEventHandler dataReceivedCallback ) {
             if ( !IPAddress.TryParse( hostname, out IPAddress ip ) )
                 throw new InvalidCastException( $"Could not convert {hostname} to a valid IPAddress instance." );
 
@@ -66,7 +66,7 @@ namespace Networking {
             _listener.Bind( new IPEndPoint( ip, port ) );
 
             ClientConnectionRequested += newClientCallback;
-            ReceivedPacket += receivedPacketCallback;
+            DataReceived += dataReceivedCallback;
 
             Receive();
         }
@@ -92,7 +92,7 @@ namespace Networking {
                         ClientConnectionRequested?.Invoke( user );
                     }
 
-                    ReceivedPacket?.Invoke( user, p );
+                    DataReceived?.Invoke( user, p );
                 }
             } );
         }

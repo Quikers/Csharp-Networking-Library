@@ -13,9 +13,9 @@ namespace Networking {
 
         #region Events
 
-        public event SocketEventHandler ConnectionSuccessful;
         public event SocketErrorEventHandler ConnectionFailed;
         public event DataEventHandler DataReceived;
+        public event DataEventHandler DataSent;
 
         #endregion
 
@@ -109,48 +109,12 @@ namespace Networking {
         public void Send( Packet data ) => Send( data, false );
         public void Send( object data, bool debug ) => Send( new Packet( data ), debug );
         public void Send( Packet data, bool debug ) {
-            if ( data.Type.Name.ToLower() != "ping" && !Connected ) {
-                Console.WriteLine( "Could not connect to the server" );
-                return;
-            }
-
             try {
                 _client.SendTo( data.Serialized, RemoteEndPoint );
-
-                // Strictly for debugging the sent messages
-                if ( debug )
-                    Console.WriteLine( $"SENT \"{data.Content}\" TO {RemoteEndPoint}" );
+                DataSent?.Invoke( this, data );
             } catch ( Exception ex ) {
                 ConnectionFailed?.Invoke( this, ex );
             }
-        }
-
-        public void SendPing() => SendPing( 25 );
-
-        private void SendPing( int tries ) {
-            if ( tries <= 0 ) {
-                if ( _ping.Received ) {
-                    Console.WriteLine( "Pong received!" );
-                    Connected = true;
-                    ConnectionSuccessful?.Invoke( this );
-                } else {
-                    Console.WriteLine( "Ping did not come back on time." );
-                    Connected = false;
-                    ConnectionFailed?.Invoke( this, null );
-                    return;
-                }
-            }
-
-            Task.Run( () => {
-                _ping = new Ping();
-                string pingID = _ping.ID;
-
-                Send( _ping );
-                Thread.Sleep( 200 );
-
-                if ( _ping.ID == pingID && !_ping.Received )
-                    SendPing( --tries );
-            } );
         }
 
         public void Receive() => Receive( 4096 );
@@ -199,16 +163,6 @@ namespace Networking {
 
             // Convert and store the message in a variable
             Packet p = new Packet( buffer.ToList().GetRange( 0, length ).ToArray() );
-
-            // Strictly for debugging the received messages
-            if ( p.Type.Name.ToLower() == "ping" && p.TryDeserializePacket( out _ping ) )
-                Console.WriteLine( _ping.Received ? "Received pong!" : "Something went wrong with a pong message." );
-
-            Console.WriteLine( $"RECV \"{p.Content}\" FROM {tmp}" );
-
-            // If the message was a PING, send a PONG back
-            if ( p.Content.ToString() == "PING" )
-                Send( "PONG" );
 
             return p;
         }

@@ -88,8 +88,7 @@ namespace Networking {
             _client.Connect( hostEndPoint );
             // Start listening to the newly created connection the the server
             _listener.Bind( _client.LocalEndPoint );
-
-            SendPing();
+            
             Connected = true;
         }
 

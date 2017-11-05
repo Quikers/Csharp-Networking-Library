@@ -101,6 +101,9 @@ namespace UdpNetworking {
         /// <param name="obj">the <see cref="object"/> to convert</param>
         /// <returns>The converted <see cref="object"/> as a <see cref="byte"/> array</returns>
         private static byte[] Serialize( object obj ) {
+            if ( obj == null )
+                return new byte[ 0 ];
+
             using ( MemoryStream ms = new MemoryStream() ) {
                 new BinaryFormatter().Serialize( ms, obj );
                 return ms.ToArray();

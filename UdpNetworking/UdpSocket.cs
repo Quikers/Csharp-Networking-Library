@@ -196,7 +196,7 @@ namespace UdpNetworking {
 
         /// <summary>Sends a <see cref="Ping"/> to the remote host, expecting a <see cref="Pong"/> with the same ID back.</summary>
         public void SendPing() {
-            if ( Ping != null && Pong != null && Ping.ID == Pong.ID )
+            if ( Ping == null || Pong == null || Ping.ID == Pong.ID )
                 Ping = new Ping();
 
             Send( Ping );

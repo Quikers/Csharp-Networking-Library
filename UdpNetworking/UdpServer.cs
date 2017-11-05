@@ -21,8 +21,6 @@ namespace UdpNetworking {
 
         /// <summary>Fires when a new client has connected.</summary>
         public SocketEventHandler OnNewClientRequest;
-        /// <summary>Fires when the <seealso cref="Clients"/> list has updated.</summary>
-        public SocketEventHandler OnClientListUpdated;
         /// <summary>Fires when a new packet has been received.</summary>
         public DataEventHandler OnDataReceived;
         /// <summary>Fires when a packet has been sent by any of the clients in the <seealso cref="Clients"/> list.</summary>
@@ -33,9 +31,9 @@ namespace UdpNetworking {
         #region Local Variables
 
         private Socket _socket;
-        
-        /// <summary>The list of <see cref="UdpSocket"/>s managed by the <see cref="UdpServer"/>.</summary>
-        public List<UdpSocket> Clients = new List<UdpSocket>();
+
+        /// <summary>The list of <see cref="User"/>s managed by the <see cref="UdpServer"/>.</summary>
+        public UserList Clients = new UserList();
         /// <summary>Whether the <see cref="UdpServer"/> is bound and started receiving.</summary>
         public bool IsActive { get; private set; }
 
@@ -169,26 +167,24 @@ namespace UdpNetworking {
 
                     try {
                         // Check if the UdpSocket EndPoint exists
-                        int index = Clients.IndexOf( Clients.First( s => s.RemoteEndPoint.ToString() == ep.ToString() ) );
-
-                        if ( p.Type.Name.ToLower() == "ping" )
-                            Clients[index].Send( new Pong( p.DeserializePacket<Ping>().ID ) );
-
-                        OnDataReceived?.Invoke( Clients[index], p );
-                    } catch ( Exception ) { /* Ignored */ }
+                        if ( Clients.Exists( ep ) && p.Type.Name.ToLower() == "ping" )
+                            Clients[ ep ].Socket.Send( new Pong( p.DeserializePacket<Ping>().ID ) );
+                        
+                        OnDataReceived?.Invoke( Clients[ ep ].Socket, p );
+                    } catch ( Exception ex ) { Console.WriteLine( ex ); }
                 }
             } );
 
             Task.Run( () => {
                 while ( true ) {
-                    Clients.ForEach( s => {
-                        if ( !s.Connected )
+                    Clients.ToList().ForEach( s => {
+                        if ( !s.Socket.Connected )
                             Clients.Remove( s );
 
-                        if ( s.MsSinceLastPing >= 10000 )
+                        if ( s.Socket.MsSinceLastPing >= 10000 )
                             Clients.Remove( s );
 
-                        Console.WriteLine( $"{s.RemoteEndPoint}'S MS SINCE LAST PING: {s.MsSinceLastPing}" );
+                        Console.WriteLine( $"{s.Socket.RemoteEndPoint}'S MS SINCE LAST PING: {s.Socket.MsSinceLastPing}" );
                     } );
 
                     Thread.Sleep( 1000 );
@@ -215,11 +211,11 @@ namespace UdpNetworking {
         /// <param name="bufferSize">The maximum packet size to receive</param>
         /// <returns>True if a packet has arrived, false if the packet was corrupted or was null</returns>
         public bool TryReceiveOnce( out Packet packet, out EndPoint endPoint, int bufferSize ) {
-            packet = null;
             try {
                 packet = ReceiveOnce( out endPoint, bufferSize );
                 return packet != null;
             } catch ( Exception ) {
+                packet = null;
                 endPoint = null;
                 return false;
             }
@@ -247,12 +243,11 @@ namespace UdpNetworking {
             Packet p = new Packet( buffer.ToList().GetRange( 0, length ) );
 
             endPoint = newClient;
-
-            try {
-                UdpSocket tmp = Clients.First( s => s.RemoteEndPoint.ToString() == newClient.ToString() );
-                tmp.ResetPingWatch();
+            
+            if ( Clients.Exists( newClient ) ) {
+                Clients[ newClient ].Socket.ResetPingWatch();
                 return p;
-            } catch ( Exception ) { /* Ignored */ }
+            }
 
             UdpSocket socket = new UdpSocket( endPoint );
             Clients.Add( socket );

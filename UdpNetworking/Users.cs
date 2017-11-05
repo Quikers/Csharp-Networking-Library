@@ -14,7 +14,7 @@ namespace UdpNetworking {
 
         public int ID;
         public string Username;
-        [NonSerialized] public TcpSocket Socket;
+        [NonSerialized] public UdpSocket Socket;
 
         #endregion
 
@@ -32,7 +32,12 @@ namespace UdpNetworking {
             ID = -1;
             Username = username;
         }
-        public User( TcpSocket socket ) {
+        public User( EndPoint endPoint ) {
+            ID = -1;
+            Username = "UNKNOWN";
+            Socket = new UdpSocket( endPoint );
+        }
+        public User( UdpSocket socket ) {
             ID = -1;
             Username = "UNKNOWN";
             Socket = socket;
@@ -41,12 +46,22 @@ namespace UdpNetworking {
             ID = id;
             Username = username;
         }
-        public User( string username, TcpSocket socket ) {
+        public User( string username, EndPoint endPoint ) {
+            ID = -1;
+            Username = username;
+            Socket = new UdpSocket( endPoint );
+        }
+        public User( string username, UdpSocket socket ) {
             ID = -1;
             Username = username;
             Socket = socket;
         }
-        public User( int id, string username, TcpSocket socket ) {
+        public User( int id, string username, EndPoint endPoint ) {
+            ID = id;
+            Username = username;
+            Socket = new UdpSocket( endPoint );
+        }
+        public User( int id, string username, UdpSocket socket ) {
             ID = id;
             Username = username;
             Socket = socket;
@@ -65,9 +80,14 @@ namespace UdpNetworking {
     [Serializable]
     public class UserList : IEnumerable<User> {
 
-        #region Events
+        #region Event Handlers
 
         public delegate void UserEvent( User user );
+
+        #endregion
+
+        #region Events
+
         public event UserEvent OnUserListChanged;
         public event UserEvent OnUserAdded;
         public event UserEvent OnUserRemoved;
@@ -88,79 +108,76 @@ namespace UdpNetworking {
         public User this[ User user ] { get { try { return _userList.First( u => u == user ); } catch ( Exception ) { return null; } } }
         public User this[ int id ] { get { try { return _userList.First( u => u.ID == id ); } catch ( Exception ) { return null; } } }
         public User this[ string username ] { get { try { return _userList.First( u => u.Username.ToLower() == username.ToLower() ); } catch ( Exception ) { return null; } } }
-        public User this[ TcpSocket connectionInfo ] { get { try { return _userList.First( u => u.Socket == connectionInfo ); } catch ( Exception ) { return null; } } }
+        public User this[ EndPoint endPoint ] { get { try { return _userList.First( u => u.Socket.RemoteEndPoint.ToString() == endPoint.ToString() ); } catch ( Exception ) { return null; } } }
+        public User this[ UdpSocket socket ] { get { try { return _userList.First( u => u.Socket == socket ); } catch ( Exception ) { return null; } } }
 
         #endregion
 
         #region User-collection Manipulation Methods
 
-        public void CreateUser( string username ) => CreateUser( username, null );
-        public void CreateUser( string username, TcpSocket connectionInfo ) => AddUser( new User( username, connectionInfo ) );
-        public void CreateTempUser( TcpSocket connectionInfo ) => AddUser( new User( connectionInfo ) );
+        public void Create( string username ) => Create( username, null );
+        public void Create( string username, UdpSocket socket ) => Add( new User( username, socket ) );
+        public void Create( EndPoint endPoint ) => Add( new User( endPoint ) );
+        public void Create( UdpSocket socket ) => Add( new User( socket ) );
 
-        public void AddUser( User user ) {
+        public void Add( EndPoint endPoint ) => Add( new User( endPoint ) );
+        public void Add( UdpSocket socket ) => Add( new User( socket ) );
+        public void Add( User user ) {
             if ( user.Username != "UNKNOWN" && Exists( user.Username ) || user.Socket != null && Exists( user.Socket ) )
                 return;
-            if ( user.ID >= 0 && Exists( user.ID ) ) {
-                return;
-            }
-
-            Add( user );
-        }
-
-        public void RemoveUser( User user ) {
-            if ( !Exists( user ) )
+            if ( user.ID >= 0 && Exists( user.ID ) )
                 return;
 
-            Remove( user );
-        }
-
-        public void RemoveUser( int id ) {
-            if ( !Exists( id ) )
-                return;
-
-            Remove( this[ id ] );
-        }
-        public void RemoveUser( string username ) {
-            if ( !Exists( username ) )
-                return;
-
-            Remove( this[ username ] );
-        }
-        public void RemoveUser( TcpSocket connectionInfo ) {
-            if ( !Exists( connectionInfo ) )
-                return;
-
-            Remove( this[ connectionInfo ] );
-        }
-
-        public void RemoveUserAt( int index ) {
-            if ( _userList[ index ] == null )
-                return;
-
-            RemoveAt( index );
-        }
-
-        #region Overrides
-
-        private void Add( User user ) {
             OnUserAdded?.Invoke( user );
             OnUserListChanged?.Invoke( user );
             _userList.Add( user );
         }
 
-        private void Remove( User user ) {
+        public void Remove( User user ) {
+            if ( !Exists( user ) )
+                return;
+
             OnUserRemoved?.Invoke( user );
             OnUserListChanged?.Invoke( user );
             _userList.Remove( user );
         }
 
-        private void RemoveAt( int index ) {
+        public void Remove( int id ) {
+            if ( !Exists( id ) )
+                return;
+
+            OnUserRemoved?.Invoke( this[ id ] );
+            OnUserListChanged?.Invoke( this[ id ] );
+            _userList.Remove( this[ id ] );
+        }
+        public void Remove( string username ) {
+            if ( !Exists( username ) )
+                return;
+
+            OnUserRemoved?.Invoke( this[ username ] );
+            OnUserListChanged?.Invoke( this[ username ] );
+            _userList.Remove( this[ username ] );
+        }
+        public void Remove( UdpSocket socket ) {
+            if ( !Exists( socket ) )
+                return;
+
+            OnUserRemoved?.Invoke( this[ socket ] );
+            OnUserListChanged?.Invoke( this[ socket ] );
+            _userList.Remove( this[ socket ] );
+        }
+
+        public void RemoveAt( int index ) {
+            if ( _userList[ index ] == null )
+                return;
+
             User user = _userList[ index ];
             OnUserRemoved?.Invoke( user );
             OnUserListChanged?.Invoke( user );
             _userList.RemoveAt( index );
         }
+
+        #region Overrides
 
         public void Clear() { _userList.Clear(); }
 
@@ -173,7 +190,8 @@ namespace UdpNetworking {
         public bool Exists( User user ) => this[ user ] != null;
         public bool Exists( int id ) => this[ id ] != null;
         public bool Exists( string username ) => this[ username ] != null;
-        public bool Exists( TcpSocket connectionInfo ) => this[ connectionInfo ] != null;
+        public bool Exists( EndPoint endPoint ) => this[ endPoint ] != null;
+        public bool Exists( UdpSocket socket ) => this[ socket ] != null;
 
         #endregion
 
@@ -191,17 +209,17 @@ namespace UdpNetworking {
         /// Removes all the <see cref="User"/>s currently not connected (only usable on server-side).
         /// </summary>
         public void ClearDisconnectedUsers() {
-                foreach ( User user in _userList.ToList().Where( u => u.Socket == null || !u.Socket.Connected ) )
-                    RemoveUser( user );
+            foreach ( User user in _userList.ToList().Where( u => u.Socket == null || !u.Socket.Connected ) )
+                Remove( user );
         }
 
-        #region Don't touch or you will die
+        public IEnumerator<User> GetEnumerator() {
+            return ( ( IEnumerable<User> )_userList ).GetEnumerator();
+        }
 
-        public IEnumerator<User> GetEnumerator() => _userList.GetEnumerator();
-
-        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-
-        #endregion
+        IEnumerator IEnumerable.GetEnumerator() {
+            return ( ( IEnumerable<User> )_userList ).GetEnumerator();
+        }
 
         #endregion
 

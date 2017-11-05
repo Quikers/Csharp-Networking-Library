@@ -47,7 +47,7 @@ namespace UdpNetworking {
         /// </summary>
         public TcpSocket( string hostname, int port ) { _socket.Connect( hostname, port ); }
         /// <summary>
-        /// Converts a TcpClient to a TcpSocket.
+        /// Converts a TcpClient to a Socket.
         /// </summary>
         public TcpSocket( TcpClient socket ) { _socket = socket; }
 

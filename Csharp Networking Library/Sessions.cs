@@ -39,9 +39,9 @@ namespace UdpNetworking {
         }
 
         public void Broadcast( Packet packet ) {
-            foreach ( User user in UserList.ToList().Where( u => u.TcpSocket != null && u.TcpSocket.Connected ) ) {
-                if ( user.TcpSocket != null && user.TcpSocket.Connected )
-                    user.TcpSocket.Send( packet );
+            foreach ( User user in UserList.ToList().Where( u => u.Socket != null && u.Socket.Connected ) ) {
+                if ( user.Socket != null && user.Socket.Connected )
+                    user.Socket.Send( packet );
             }
         }
 

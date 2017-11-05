@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace UdpNetworking {
@@ -34,14 +35,16 @@ namespace UdpNetworking {
         private Socket _sender;
         private Socket _receiver;
         private Stopwatch _pingWatch = new Stopwatch();
+        private Stopwatch _stayAliveWatch = new Stopwatch();
 
         /// <summary>This <see cref="Ping"/> variable is used to check if the remote host sends the correct <see cref="Pong"/> back.</summary>
         public Ping Ping;
+
         /// <summary>This <see cref="Pong"/> variable is used to check if the remote host sent the correct <see cref="Pong"/> back, in comparison to the <see cref="Ping"/> variable.</summary>
         public Pong Pong;
 
         /// <summary>Gets the amount of milliseconds passed since the last <see cref="Ping"/> that this client sent. For server-sided intentions.</summary>
-        public int MsSinceLastPing => (int)_pingWatch.ElapsedMilliseconds;
+        public int MsSinceLastPing => ( int )_pingWatch.ElapsedMilliseconds;
 
         /// <summary>The <see cref="EndPoint"/> of the remote host</summary>
         public EndPoint LocalEndPoint { get { try { return _sender.LocalEndPoint; } catch ( Exception ) { return null; } } }
@@ -69,7 +72,7 @@ namespace UdpNetworking {
         }
 
         /// <summary>
-        /// Creates a new instance of the <see cref="UdpSocket"/> class.
+        /// Creates a new instance of the <see cref="UdpSocket"/> class and automatically connects it to the remote host.
         /// </summary>
         /// <param name="hostname">The hostname of the remote host to connect to</param>
         /// <param name="port">The port on the remote host to connect to</param>
@@ -81,7 +84,7 @@ namespace UdpNetworking {
         }
 
         /// <summary>
-        /// Creates a new instance of the <see cref="UdpSocket"/> class.
+        /// Creates a new instance of the <see cref="UdpSocket"/> class and automatically connects it to the remote host.
         /// </summary>
         /// <param name="hostIP">The <see cref="IPAddress"/> of the remote host to connect to</param>
         /// <param name="port">The port on the remote host to connect to</param>
@@ -93,7 +96,7 @@ namespace UdpNetworking {
         }
 
         /// <summary>
-        /// Creates a new instance of the <see cref="UdpSocket"/> class.
+        /// Creates a new instance of the <see cref="UdpSocket"/> class and automatically connects it to the remote host.
         /// </summary>
         /// <param name="endPoint">The <see cref="EndPoint"/> of the remote host to connect to</param>
         public UdpSocket( EndPoint endPoint ) {
@@ -153,6 +156,7 @@ namespace UdpNetworking {
             _receiver.Bind( _sender.LocalEndPoint );
 
             _pingWatch.Restart();
+            _stayAliveWatch.Restart();
         }
 
         /// <summary>
@@ -182,6 +186,7 @@ namespace UdpNetworking {
         /// </summary>
         /// <param name="value">The <see cref="object"/> to send</param>
         public void Send( object value ) => Send( new Packet( value ) );
+
         /// <summary>
         /// Send a <see cref="Packet"/> to the remote host.
         /// </summary>
@@ -201,6 +206,35 @@ namespace UdpNetworking {
 
             Send( Ping );
         }
+
+        /// <summary>
+        /// Sends a <see cref="Ping"/> to the remote host every 500 milliseconds to make sure that the connection stays alive.
+        /// </summary>
+        /// <returns>Whether the <see cref="Ping"/> was returned as a <see cref="Pong"/></returns>
+        public bool StayAlive() => StayAlive( 20, 500, true );
+        /// <summary>
+        /// Sends a <see cref="Ping"/> to the remote host to make sure that the connection stays alive.
+        /// </summary>
+        /// <param name="tries">The amount of <see cref="Ping"/>s to send in total</param>
+        /// <param name="delay">The amount of milliseconds to wait after every ping</param>
+        /// <param name="blockSpam">Whether to prevent <see cref="Ping"/>-spamming (480ms minimal delay between unique <see cref="Ping"/>s)</param>
+        /// <returns>Whether the <see cref="Ping"/> was returned as a <see cref="Pong"/></returns>
+        public bool StayAlive( int tries, int delay, bool blockSpam ) => Task.Run( () => {
+            if ( blockSpam && _stayAliveWatch.ElapsedMilliseconds < 480 )
+                return false;
+            _stayAliveWatch.Restart();
+
+            SendPing();
+
+            Thread.Sleep( delay );
+
+            if ( tries <= 0 )
+                return false;
+            if ( Pong != null && Ping.ID == Pong.ID )
+                return true;
+
+            return StayAlive( --tries, delay, false );
+        } ).Result;
 
         /// <summary>Resets the <seealso cref="MsSinceLastPing"/>'s time back to 0.</summary>
         public void ResetPingWatch() => _pingWatch.Restart();

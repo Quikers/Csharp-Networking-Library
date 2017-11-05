@@ -1,13 +1,13 @@
 ﻿
-namespace Networking {
+namespace UdpNetworking {
+
+    #region Event Handlers
+
+    public delegate void UserListEventHandler( UserList uList );
+
+    #endregion
 
     public partial class Data {
-
-        #region Event Handlers
-
-        public delegate void UserListEventHandler( UserList uList );
-
-        #endregion
 
         #region Events
 

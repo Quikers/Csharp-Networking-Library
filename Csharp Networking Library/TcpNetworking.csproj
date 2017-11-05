@@ -7,8 +7,8 @@
     <ProjectGuid>{6C112851-2EAC-4254-A830-388BC2AE0D31}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Networking</RootNamespace>
-    <AssemblyName>Networking</AssemblyName>
+    <RootNamespace>TcpNetworking</RootNamespace>
+    <AssemblyName>TcpNetworking</AssemblyName>
     <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
@@ -48,8 +48,6 @@
     <Compile Include="Sessions.cs" />
     <Compile Include="TcpServer.cs" />
     <Compile Include="TcpSocket.cs" />
-    <Compile Include="UdpServer.cs" />
-    <Compile Include="UdpSocket.cs" />
     <Compile Include="Users.cs" />
     <Compile Include="Utils.cs" />
   </ItemGroup>

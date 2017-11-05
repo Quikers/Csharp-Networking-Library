@@ -6,12 +6,6 @@ using System.Threading.Tasks;
 
 namespace UdpNetworking {
 
-    #region Event Handlers
-
-    public delegate void DataEventHandler( TcpSocket socket, Packet packet );
-
-    #endregion
-
     #region DataClasses
 
     [ Serializable ]

@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 
-namespace Networking {
+namespace UdpNetworking {
 
     public class TcpServer : TcpListener {
 
         #region Events
 
-        public event TcpSocketEventHandler ClientConnectionRequested;
+        public event SocketEventHandler ClientConnectionRequested;
 
         #endregion
 
@@ -21,11 +21,11 @@ namespace Networking {
 
         #region Constructors
 
-        public TcpServer( int port, TcpSocketEventHandler callback ) : base( IPAddress.Any, port ) {
+        public TcpServer( int port, SocketEventHandler callback ) : base( IPAddress.Any, port ) {
             ClientConnectionRequested += callback;
             BeginAccepting();
         }
-        public TcpServer( IPAddress ip, int port, TcpSocketEventHandler callback ) : base( ip, port ) {
+        public TcpServer( IPAddress ip, int port, SocketEventHandler callback ) : base( ip, port ) {
             ClientConnectionRequested += callback;
             BeginAccepting();
         }

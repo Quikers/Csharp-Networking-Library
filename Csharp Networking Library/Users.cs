@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using System.Collections;
 using System.Net;
 
-namespace Networking {
+namespace UdpNetworking {
 
     [Serializable]
     public class User {
@@ -14,8 +14,7 @@ namespace Networking {
 
         public int ID;
         public string Username;
-        [NonSerialized] public TcpSocket TcpConnectionInfo;
-        [NonSerialized] public UdpSocket UdpConnectionInfo;
+        [NonSerialized] public TcpSocket TcpSocket;
 
         #endregion
 
@@ -33,39 +32,24 @@ namespace Networking {
             ID = -1;
             Username = username;
         }
-        public User( TcpSocket tcpConnectionInfo ) {
+        public User( TcpSocket tcpSocket ) {
             ID = -1;
             Username = "UNKNOWN";
-            TcpConnectionInfo = tcpConnectionInfo;
-        }
-        public User( UdpSocket udpConnectionInfo ) {
-            ID = -1;
-            Username = "UNKNOWN";
-            UdpConnectionInfo = udpConnectionInfo;
+            TcpSocket = tcpSocket;
         }
         public User( int id, string username ) {
             ID = id;
             Username = username;
         }
-        public User( string username, TcpSocket tcpConnectionInfo ) {
+        public User( string username, TcpSocket tcpSocket ) {
             ID = -1;
             Username = username;
-            TcpConnectionInfo = tcpConnectionInfo;
+            TcpSocket = tcpSocket;
         }
-        public User( int id, string username, TcpSocket tcpConnectionInfo ) {
+        public User( int id, string username, TcpSocket tcpSocket ) {
             ID = id;
             Username = username;
-            TcpConnectionInfo = tcpConnectionInfo;
-        }
-        public User( string username, UdpSocket udpConnectionInfo ) {
-            ID = -1;
-            Username = username;
-            UdpConnectionInfo = udpConnectionInfo;
-        }
-        public User( int id, string username, UdpSocket udpConnectionInfo ) {
-            ID = id;
-            Username = username;
-            UdpConnectionInfo = udpConnectionInfo;
+            TcpSocket = tcpSocket;
         }
 
         #endregion
@@ -95,6 +79,8 @@ namespace Networking {
         private List<User> _userList = new List<User>();
         private int _idAutoIncrement;
 
+        public int Count => _userList.Count;
+
         #endregion
 
         #region Indexer Properties
@@ -102,8 +88,7 @@ namespace Networking {
         public User this[ User user ] { get { try { return _userList.First( u => u == user ); } catch ( Exception ) { return null; } } }
         public User this[ int id ] { get { try { return _userList.First( u => u.ID == id ); } catch ( Exception ) { return null; } } }
         public User this[ string username ] { get { try { return _userList.First( u => u.Username.ToLower() == username.ToLower() ); } catch ( Exception ) { return null; } } }
-        public User this[ TcpSocket connectionInfo ] { get { try { return _userList.First( u => u.TcpConnectionInfo == connectionInfo ); } catch ( Exception ) { return null; } } }
-        public User this[ UdpSocket connectionInfo ] { get { try { return _userList.First( u => u.UdpConnectionInfo == connectionInfo ); } catch ( Exception ) { return null; } } }
+        public User this[ TcpSocket connectionInfo ] { get { try { return _userList.First( u => u.TcpSocket == connectionInfo ); } catch ( Exception ) { return null; } } }
 
         #endregion
 
@@ -112,10 +97,9 @@ namespace Networking {
         public void CreateUser( string username ) => CreateUser( username, null );
         public void CreateUser( string username, TcpSocket connectionInfo ) => AddUser( new User( username, connectionInfo ) );
         public void CreateTempUser( TcpSocket connectionInfo ) => AddUser( new User( connectionInfo ) );
-        public void CreateTempUser( UdpSocket connectionInfo ) => AddUser( new User( connectionInfo ) );
 
         public void AddUser( User user ) {
-            if ( Exists( user.Username ) || user.TcpConnectionInfo != null && Exists( user.TcpConnectionInfo ) )
+            if ( user.Username != "UNKNOWN" && Exists( user.Username ) || user.TcpSocket != null && Exists( user.TcpSocket ) )
                 return;
             if ( user.ID >= 0 && Exists( user.ID ) ) {
                 return;
@@ -124,44 +108,38 @@ namespace Networking {
             Add( user );
         }
 
-        public void RemoveUser( User user ) => Task.Run( () => {
+        public void RemoveUser( User user ) {
             if ( !Exists( user ) )
                 return;
 
             Remove( user );
-        } ).Wait();
+        }
 
-        public void RemoveUser( int id ) => Task.Run( () => {
+        public void RemoveUser( int id ) {
             if ( !Exists( id ) )
                 return;
 
             Remove( this[ id ] );
-        } );
-        public void RemoveUser( string username ) => Task.Run( () => {
+        }
+        public void RemoveUser( string username ) {
             if ( !Exists( username ) )
                 return;
 
             Remove( this[ username ] );
-        } ).Wait();
-        public void RemoveUser( TcpSocket connectionInfo ) => Task.Run( () => {
+        }
+        public void RemoveUser( TcpSocket connectionInfo ) {
             if ( !Exists( connectionInfo ) )
                 return;
 
             Remove( this[ connectionInfo ] );
-        } ).Wait();
-        public void RemoveUser( UdpSocket connectionInfo ) => Task.Run( () => {
-            if ( !Exists( connectionInfo ) )
-                return;
+        }
 
-            Remove( this[ connectionInfo ] );
-        } ).Wait();
-
-        public void RemoveUserAt( int index ) => Task.Run( () => {
+        public void RemoveUserAt( int index ) {
             if ( _userList[ index ] == null )
                 return;
 
             RemoveAt( index );
-        } ).Wait();
+        }
 
         #region Overrides
 
@@ -196,7 +174,6 @@ namespace Networking {
         public bool Exists( int id ) => this[ id ] != null;
         public bool Exists( string username ) => this[ username ] != null;
         public bool Exists( TcpSocket connectionInfo ) => this[ connectionInfo ] != null;
-        public bool Exists( UdpSocket connectionInfo ) => this[ connectionInfo ] != null;
 
         #endregion
 
@@ -213,25 +190,16 @@ namespace Networking {
         /// <summary>
         /// Removes all the <see cref="User"/>s currently not connected (only usable on server-side).
         /// </summary>
-        public void ClearDisconnectedUsers() => ClearDisconnectedUsers( true, true );
-        public void ClearDisconnectedUsers( bool checkTcpProtocol, bool checkUdpProtocol ) {
-            if ( checkTcpProtocol )
-                foreach ( User user in _userList.ToList().Where( u => u.TcpConnectionInfo == null || !u.TcpConnectionInfo.Connected ) )
-                    RemoveUser( user );
-            if ( checkUdpProtocol )
-                foreach ( User user in _userList.ToList().Where( u => u.UdpConnectionInfo == null || !u.UdpConnectionInfo.Connected ) )
+        public void ClearDisconnectedUsers() {
+                foreach ( User user in _userList.ToList().Where( u => u.TcpSocket == null || !u.TcpSocket.Connected ) )
                     RemoveUser( user );
         }
 
         #region Don't touch or you will die
 
-        public IEnumerator<User> GetEnumerator() {
-            throw new NotImplementedException();
-        }
+        public IEnumerator<User> GetEnumerator() => _userList.GetEnumerator();
 
-        IEnumerator IEnumerable.GetEnumerator() {
-            throw new NotImplementedException();
-        }
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
         #endregion
 

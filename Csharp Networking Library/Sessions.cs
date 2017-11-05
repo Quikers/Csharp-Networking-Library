@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Networking {
+namespace UdpNetworking {
 
     [Serializable]
     public enum SessionState {
@@ -39,11 +39,9 @@ namespace Networking {
         }
 
         public void Broadcast( Packet packet ) {
-            foreach ( User user in UserList.ToList().Where( u => u.TcpConnectionInfo != null && u.TcpConnectionInfo.Connected || u.UdpConnectionInfo != null && u.UdpConnectionInfo.Connected ) ) {
-                if ( user.TcpConnectionInfo != null && user.TcpConnectionInfo.Connected )
-                    user.TcpConnectionInfo.Send( packet );
-                if ( user.UdpConnectionInfo != null && user.UdpConnectionInfo.Connected )
-                    user.UdpConnectionInfo.Send( packet );
+            foreach ( User user in UserList.ToList().Where( u => u.TcpSocket != null && u.TcpSocket.Connected ) ) {
+                if ( user.TcpSocket != null && user.TcpSocket.Connected )
+                    user.TcpSocket.Send( packet );
             }
         }
 

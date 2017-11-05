@@ -4,14 +4,12 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 
-namespace Networking {
+namespace UdpNetworking {
 
     #region Event Handlers
 
-    public delegate void TcpSocketEventHandler( TcpSocket socket );
-    public delegate void SocketEventHandler( UdpSocket socket );
-    public delegate void TcpSocketErrorEventHandler( TcpSocket socket, Exception ex );
-    public delegate void SocketErrorEventHandler( UdpSocket socket, Exception ex );
+    public delegate void SocketEventHandler( TcpSocket socket );
+    public delegate void SocketErrorEventHandler( TcpSocket socket, Exception ex );
 
     #endregion
 
@@ -19,11 +17,11 @@ namespace Networking {
 
         #region Events
 
-        public event TcpSocketEventHandler ConnectionSuccessful;
-        public event TcpSocketErrorEventHandler ConnectionFailed;
-        public event TcpSocketErrorEventHandler ConnectionLost;
-        public event TcpDataEventHandler DataReceived;
-        public event TcpDataEventHandler DataSent;
+        public event SocketEventHandler ConnectionSuccessful;
+        public event SocketErrorEventHandler ConnectionFailed;
+        public event SocketErrorEventHandler ConnectionLost;
+        public event DataEventHandler DataReceived;
+        public event DataEventHandler DataSent;
 
         #endregion
 

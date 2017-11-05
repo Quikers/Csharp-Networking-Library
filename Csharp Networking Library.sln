@@ -3,7 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26430.16
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Networking", "Csharp Networking Library\Networking.csproj", "{6C112851-2EAC-4254-A830-388BC2AE0D31}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TcpNetworking", "Csharp Networking Library\TcpNetworking.csproj", "{6C112851-2EAC-4254-A830-388BC2AE0D31}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UdpNetworking", "UdpNetworking\UdpNetworking.csproj", "{0B59828D-F1B8-4562-BDFF-5ED891F1F0D3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{6C112851-2EAC-4254-A830-388BC2AE0D31}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6C112851-2EAC-4254-A830-388BC2AE0D31}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6C112851-2EAC-4254-A830-388BC2AE0D31}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0B59828D-F1B8-4562-BDFF-5ED891F1F0D3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B59828D-F1B8-4562-BDFF-5ED891F1F0D3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0B59828D-F1B8-4562-BDFF-5ED891F1F0D3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0B59828D-F1B8-4562-BDFF-5ED891F1F0D3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

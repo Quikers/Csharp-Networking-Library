@@ -6,22 +6,36 @@ using System.Threading.Tasks;
 
 namespace UdpNetworking {
 
-    #region Event Handlers
+    #region Extension Methods
 
-    public delegate void DataEventHandler( TcpSocket socket, Packet packet );
+    public static class ExtMethods {
+
+        public static IPEndPoint ToIPEndPoint( this EndPoint endPoint ) {
+            if ( endPoint == null )
+                return null;
+
+            string[] tmp = endPoint.ToString().Split( ':' );
+            IPAddress ip = IPAddress.Parse( tmp[ 0 ] );
+            int port = int.Parse( tmp[ 1 ] );
+
+            return new IPEndPoint( ip, port );
+        }
+
+    }
 
     #endregion
 
     #region DataClasses
 
-    [ Serializable ]
+    [Serializable]
     public enum GET {
+        NewClientID,
         UserList,
 
     }
 
     [Serializable]
-    public class Ping {
+    public sealed class Ping {
 
         #region Variables
 
@@ -35,6 +49,8 @@ namespace UdpNetworking {
             return Guid.NewGuid().ToString( "N" );
         }
 
+        public Pong ToPong() { return new Pong( ID ); }
+
         #endregion
 
         #region Constructors
@@ -46,7 +62,7 @@ namespace UdpNetworking {
     }
 
     [Serializable]
-    public class Pong {
+    public sealed class Pong {
 
         #region Variables
 
@@ -60,6 +76,13 @@ namespace UdpNetworking {
 
         #endregion
 
+    }
+
+    [Serializable]
+    public struct Login {
+        public string Username;
+
+        public Login( string username ) { Username = username; }
     }
 
     #endregion

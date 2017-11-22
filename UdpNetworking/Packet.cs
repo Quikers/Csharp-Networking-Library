@@ -8,7 +8,7 @@ namespace UdpNetworking {
 
     #region Event Handlers
 
-    public delegate void PacketEventHandler( Packet packet );
+    public delegate void PacketEventHandler( Packet packet, Exception ex );
 
     #endregion
 
@@ -16,15 +16,21 @@ namespace UdpNetworking {
 
         #region Events
 
+        /// <summary>If the <see cref="Packet"/> fails to parse from a <see cref="byte"/> array to an instance of a <see cref="Packet"/>.</summary>
         public event PacketEventHandler ParseFailed;
 
         #endregion
 
         #region Local Variables
 
+        /// <summary>The <see cref="Type"/> of the current <seealso cref="Content"/>.</summary>
         public Type Type { get { try { return Content.GetType(); } catch ( Exception ) { return null; } } }
+        /// <summary>The <see cref="object"/> of any <see cref="Type"/> that is stored within this <see cref="Packet"/>.</summary>
         public object Content;
-        public byte[] Serialized { get => SerializePacket(); }
+        /// <summary>A serialized version of this <see cref="Packet"/>.</summary>
+        public byte[] Serialized => SerializePacket();
+        /// <summary>The name of the <see cref="Packet"/>'s <see cref="Type"/> in full lower-case.</summary>
+        public string TypeName => Type.Name.ToLower();
 
         #endregion
 
@@ -35,12 +41,12 @@ namespace UdpNetworking {
         /// </summary>
         public Packet() { ParseFailed += ParseFailedMessage; }
         /// <summary>
-        /// Create a <see cref="Packet"/> from any type of <see cref="object"/>.
+        /// Add a <see cref="Packet"/> from any type of <see cref="object"/>.
         /// </summary>
         /// <param name="obj">the <see cref="object"/> to create the <see cref="Packet"/> from</param>
         public Packet( object obj ) { Content = obj; ParseFailed += ParseFailedMessage; }
         /// <summary>
-        /// Create a <see cref="Packet"/> from a <see cref="byte"/> array.
+        /// Add a <see cref="Packet"/> from a <see cref="byte"/> array.
         /// </summary>
         /// <param name="bytes">The <see cref="byte"/> array to convert from</param>
         public Packet( IEnumerable<byte> bytes ) {
@@ -48,8 +54,8 @@ namespace UdpNetworking {
 
             try {
                 Content = Deserialize( bytes );
-            } catch ( Exception ) {
-                ParseFailed?.Invoke( this );
+            } catch ( Exception ex ) {
+                ParseFailed?.Invoke( this, ex );
             }
         }
 
@@ -57,7 +63,7 @@ namespace UdpNetworking {
 
         #region Methods
 
-        private static void ParseFailedMessage( Packet packet ) { Console.WriteLine( "Failed to deserialize packet." ); }
+        private static void ParseFailedMessage( Packet packet, Exception ex ) { Console.WriteLine( $"Failed to deserialize packet:\n\n{ex}" ); }
 
         /// <summary>
         /// Converts the contens of a <see cref="Packet"/> into a <see cref="byte"/> array.
@@ -80,17 +86,17 @@ namespace UdpNetworking {
             to = default( T );
 
             if ( Type != typeof( T ) ) {
-                ParseFailed?.Invoke( this );
+                ParseFailed?.Invoke( this, new Exception( "The packet type and the given type are not the same." ) );
                 return false;
             }
 
             try {
                 to = ( T )Content;
                 return true;
-            } catch ( Exception ) { /* Ignored */ }
-
-            ParseFailed?.Invoke( this );
-            return false;
+            } catch ( Exception ex ) {
+                ParseFailed?.Invoke( this, ex );
+                return false;
+            }
         }
 
         #region Internal Class Tools

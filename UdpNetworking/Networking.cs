@@ -46,6 +46,12 @@ namespace UdpNetworking {
     }
 
     [Serializable]
+    public enum REQUEST {
+        Login,
+
+    }
+
+    [Serializable]
     public struct NewID {
         public int ServerPort;
         public string ID;
@@ -86,8 +92,8 @@ namespace UdpNetworking {
         /// Stops the <see cref="Ping"/>-counter. This sets the <seealso cref="MsSinceSent"/> and <seealso cref="MsRoundTrip"/> variables to the amount of milliseconds it took to send and receive a <see cref="Ping"/>.
         /// </summary>
         public void MarkTime() {
-            MsSinceSent = MsCounter.ElapsedMilliseconds;
-            MsRoundTrip = ( float )( MsSinceSent / 2.0 );
+            MsRoundTrip = MsCounter.ElapsedMilliseconds;
+            MsSinceSent = ( float )( MsSinceSent / 2.0 );
         }
 
         /// <summary>Converts the <see cref="Ping"/> into a <see cref="Pong"/> with the same <see cref="ID"/>.</summary>

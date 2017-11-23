@@ -92,9 +92,9 @@ namespace UdpNetworking {
 
         private void Init() {
             // Create a temporary receiving socket on a different port than the main port
-            Socket tmpReceiverSocket = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp );
-            EndPoint ep = new IPEndPoint( IPAddress.Any, new Random().Next( UdpServer.Port + 1, UdpServer.Port + 51 ) );
-            tmpReceiverSocket.Bind( ep );
+            Socket socket = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp );
+            IPEndPoint ep = new IPEndPoint( IPAddress.Any, UdpServer.AvailablePort );
+            socket.Bind( ep );
 
             Packet p = null;
             EndPoint tmp = ep;
@@ -102,14 +102,14 @@ namespace UdpNetworking {
             // For as long as the right ID has not been received, keep receiving data.
             while ( p == null || p.Type.Name.ToLower() != "newid" || p.DeserializePacket<NewID>().ID != ID ) {
                 ID = Guid.NewGuid().ToString( "n" );
-                Send( new NewID { ID = ID, ServerPort = ep.GetPort() } );
+                Send( new NewID { ID = ID, ServerPort = ep.Port } );
                 // Use a basic receive function without any packet-handling to receive the client's ID back on the sender-socket.
-                int length = tmpReceiverSocket.ReceiveFrom( buffer, ref tmp );
+                int length = socket.ReceiveFrom( buffer, ref tmp );
                 p = new Packet( buffer.ToList().GetRange( 0, length ) );
             }
+            socket.Close();
+
             Listener.InvokeOnDataReceived( Socket, p, tmp.ToIPEndPoint() );
-            // When done, close the temporary receiver socket.
-            tmpReceiverSocket.Close();
 
             // If successful, set the User's sender-port for future reference.
             SenderPort = tmp.ToIPEndPoint().Port;
@@ -125,6 +125,9 @@ namespace UdpNetworking {
 
         public void Send( object value ) => Socket.Send( value );
         public void Send( Packet packet ) => Socket.Send( packet );
+
+        public IPEndPoint Receive( out Packet packet ) => Socket.ReceiveFrom( out packet );
+        public IPEndPoint Receive( out Packet packet, int bufferSize ) => Socket.ReceiveFrom( out packet, bufferSize );
 
         #endregion
 
@@ -186,6 +189,7 @@ namespace UdpNetworking {
         #region User Collection Manipulation Methods
 
         public void Add( IPEndPoint endPoint ) => Add( new User( endPoint ) );
+        public void Add( string username, IPEndPoint endPoint ) => Add( new User( username, endPoint ) );
         public void Add( User user ) {
             if ( user.Username != "UNKNOWN" && Contains( user.Username ) || user.Socket != null && Contains( user.Socket ) )
                 return;
@@ -202,6 +206,9 @@ namespace UdpNetworking {
         public void Remove( User user ) {
             if ( !Contains( user ) )
                 return;
+            
+            UdpServer.AvailablePort = user.SenderPort;
+            user.Socket.Close();
 
             OnUserRemoved?.Invoke( user );
             OnUserListChanged?.Invoke( user );
@@ -211,17 +218,25 @@ namespace UdpNetworking {
             if ( !Contains( id ) )
                 return;
 
-            OnUserRemoved?.Invoke( this[ id ] );
-            OnUserListChanged?.Invoke( this[ id ] );
-            _userList.Remove( this[ id ] );
+            User user = this[ id ];
+            UdpServer.AvailablePort = user.SenderPort;
+            user.Socket.Close();
+
+            OnUserRemoved?.Invoke( user );
+            OnUserListChanged?.Invoke( user );
+            _userList.Remove( user );
         }
         public void Remove( UdpSocket socket ) {
             if ( !Contains( socket ) )
                 return;
 
-            OnUserRemoved?.Invoke( this[ socket ] );
-            OnUserListChanged?.Invoke( this[ socket ] );
-            _userList.Remove( this[ socket ] );
+            User user = this[ socket ];
+            UdpServer.AvailablePort = user.SenderPort;
+            user.Socket.Close();
+
+            OnUserRemoved?.Invoke( user );
+            OnUserListChanged?.Invoke( user );
+            _userList.Remove( user );
         }
 
         public void RemoveAt( int index ) {
@@ -229,6 +244,9 @@ namespace UdpNetworking {
                 return;
 
             User user = _userList[ index ];
+            UdpServer.AvailablePort = user.SenderPort;
+            user.Socket.Close();
+
             OnUserRemoved?.Invoke( user );
             OnUserListChanged?.Invoke( user );
             _userList.RemoveAt( index );

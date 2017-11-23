@@ -16,8 +16,16 @@ namespace UdpNetworking {
 
         /// <summary>Fires when a new <see cref="UdpSocket"/> has connected.</summary>
         public event UserEventHandler OnNewClientRequest;
+        private event DataEventHandler _onDataReceived;
         /// <summary>Fires when a new <see cref="Packet"/> has been received.</summary>
-        public event DataEventHandler OnDataReceived;
+        public event DataEventHandler OnDataReceived {
+            add {
+                _onDataReceived += value;
+                UdpSocket.OnDataReceived += value; }
+            remove {
+                _onDataReceived -= value;
+                UdpSocket.OnDataReceived -= value; }
+        }
         /// <summary>Fires when a <see cref="Packet"/> has been sent by any of the <see cref="UdpSocket"/>s in the <seealso cref="UserList"/> list.</summary>
         public event DataEventHandler OnDataSent { add => UdpSocket.OnDataSent += value; remove => UdpSocket.OnDataSent -= value; }
 
@@ -30,7 +38,35 @@ namespace UdpNetworking {
         /// <summary>The list of <see cref="User"/>s managed by the <see cref="UdpServer"/>.</summary>
         public UserList UserList = new UserList();
         /// <summary>The port that was given by the user to listen on.</summary>
-        public static int Port = 8080;
+        public static int Port = -1;
+
+        private static List<int> _usedPorts = new List<int>();
+
+        /// <summary>The range of ports that should be available for this <see cref="UdpServer"/>.</summary>
+        public static int PortRange = 50;
+        /// <summary>Getting this will return an available port if there are any unused ports within the <seealso cref="PortRange"/>. Setting it will remove a used port from the list.</summary>
+        public static int AvailablePort {
+            get {
+                int port = -1;
+
+                int tries = 0;
+                while ( tries++ < PortRange ) {
+                    int tmp = Port + tries;
+                    if ( _usedPorts.Any( p => p == tmp ) )
+                        continue;
+
+                    port = tmp;
+                    _usedPorts.Add( port );
+                    break;
+                }
+
+                if ( port <= 0 )
+                    throw new Exception( $"There are no more available ports in this portrange {Port}-{Port + PortRange}({PortRange})" );
+
+                return port;
+            }
+            set => _usedPorts.Remove( value );
+        }
 
         #endregion
         #region Private Variables
@@ -61,7 +97,6 @@ namespace UdpNetworking {
         /// </summary>
         /// <param name="port">The port to bind the server on</param>
         public UdpServer( int port ) {
-            Port = port;
             Socket = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp );
 
             Bind( new IPEndPoint( IPAddress.Any, port ) );
@@ -73,7 +108,6 @@ namespace UdpNetworking {
         /// <param name="hostname">The hostname to bind the server to</param>
         /// <param name="port">The port to bind the server on</param>
         public UdpServer( string hostname, int port ) {
-            Port = port;
             Socket = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp );
 
             Bind( hostname, port );
@@ -85,7 +119,6 @@ namespace UdpNetworking {
         /// <param name="hostIP">The <see cref="IPAddress"/> to bind the server to</param>
         /// <param name="port">The port to bind the server on</param>
         public UdpServer( IPAddress hostIP, int port ) {
-            Port = port;
             Socket = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp );
 
             Bind( new IPEndPoint( hostIP, port ) );
@@ -96,7 +129,6 @@ namespace UdpNetworking {
         /// </summary>
         /// <param name="endPoint">The <see cref="EndPoint"/> to bind the server to</param>
         public UdpServer( EndPoint endPoint ) {
-            Port = endPoint.GetPort();
             Socket = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp );
 
             Bind( endPoint );
@@ -106,7 +138,7 @@ namespace UdpNetworking {
 
         #region Methods
 
-        public void InvokeOnDataReceived( UdpSocket socket, Packet packet, IPEndPoint endPoint ) => OnDataReceived?.Invoke( socket, packet, endPoint );
+        public void InvokeOnDataReceived( UdpSocket socket, Packet packet, IPEndPoint endPoint ) => _onDataReceived?.Invoke( socket, packet, endPoint );
 
         #region Connection-Methods
 
@@ -150,6 +182,8 @@ namespace UdpNetworking {
         /// </summary>
         /// <param name="endPoint">The <see cref="EndPoint"/> to bind to</param>
         public void Bind( EndPoint endPoint ) {
+            Port = endPoint.GetPort();
+            PortRange = 50;
             Socket.Bind( endPoint );
             User.Listener = this;
         }
@@ -166,95 +200,85 @@ namespace UdpNetworking {
         public void SendTo( object value, IPEndPoint remoteHost ) => SendTo( new Packet( value ), remoteHost );
         public void SendTo( Packet packet, IPEndPoint remoteHost ) {
             if ( !UserList.Contains( remoteHost ) ) {
-                Console.WriteLine( $"Cannot send: {remoteHost} is not connected to this server." );
+                Socket s = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp );
+                //s.Bind( new IPEndPoint( IPAddress.Any, Port ) );
+                //s.Connect( new IPEndPoint( remoteHost.Address, remoteHost.Port - 2 ) );
+                for ( int addedPort = 0; addedPort < 3; addedPort++ )
+                    s.SendTo( packet.Serialized, new IPEndPoint( remoteHost.Address, remoteHost.Port - addedPort ) );
                 return;
             }
 
             UserList[ remoteHost ].Send( packet );
         }
 
-        #region Receive
+        #region ReceiveFrom
 
-        #region Receive One Packet
+        #region ReceiveFrom One Packet
 
         /// <summary>
-        /// Receive one <see cref="Packet"/> and store the remote host's connection info in the given <see cref="IPEndPoint"/>.
+        /// ReceiveFrom one <see cref="Packet"/> and store the remote host's connection info in the given <see cref="IPEndPoint"/>.
         /// </summary>
         /// <param name="packet">The <see cref="Packet"/> variable that will be filled with the received <see cref="Packet"/></param>
         /// <returns>The <see cref="IPEndPoint"/> of the remote host from which the received <see cref="Packet"/> came from</returns>
         public IPEndPoint ReceiveFrom( out Packet packet ) => ReceiveFrom( out packet, 4096 );
         /// <summary>
-        /// Receive one <see cref="Packet"/> and store the remote host's connection info in the given <see cref="IPEndPoint"/>.
+        /// ReceiveFrom one <see cref="Packet"/> and store the remote host's connection info in the given <see cref="IPEndPoint"/>.
         /// </summary>
         /// <param name="packet">The <see cref="Packet"/> variable that will be filled with the received <see cref="Packet"/></param>
         /// <param name="bufferSize">The maximum size of the <see cref="Packet"/> to receive in <see cref="byte"/>s</param>
         /// <returns>The <see cref="IPEndPoint"/> of the remote host from which the received <see cref="Packet"/> came from</returns>
         public IPEndPoint ReceiveFrom( out Packet packet, int bufferSize ) {
+            byte[] buffer = new byte[ bufferSize ];
+            EndPoint ep = new IPEndPoint( IPAddress.Any, 0 );
             // Wait for an incoming packet.
-            IPEndPoint newClient = SocketReceiveFrom( out packet, bufferSize );
+            int length = Socket.ReceiveFrom( buffer, ref ep );
+            // Format the data and remove empty buffer, then convert it to a packet.
+            packet = new Packet( buffer.ToList().GetRange( 0, length ) );
+            IPEndPoint newClient = ep.ToIPEndPoint();
+
+            // Fire the OnDataReceived event with the collected data.
+            _onDataReceived?.Invoke( UserList[ newClient ]?.Socket, packet, newClient );
 
             // If the received packet is of type ping.
             if ( packet.Type.Name.ToLower() == "ping" )
                 // Send a pong back.
                 SendTo( packet.DeserializePacket<Ping>().ToPong(), newClient );
 
-            /* 
-             * TODO: Right now there is only 1 receiver (and thus only 1 thread for receiving) for all clients connected. This needs to change.
-             * Idea nr. 1:
-             * 
-             * Use the given port by the user to accept clients.
-             * As soon as a client, or rather a User, has been created it gets it's own receiver (and also it's own receiver thread).
-             * This way, you can utilize the processor better and have better stability.
-             * 
-             * Especially if there are a lot of clients sending a lot of packets to the server.
-             * 
-            */ 
-
             bool userAdded = false;
             // If the packet is of type Login and the remote host's IPEndPoint has not been registered yet, create a new user.
             if ( packet.Type.Name.ToLower() == "login" ) {
+                Login login = packet.DeserializePacket<Login>();
                 if ( !UserList.Contains( newClient ) ) {
-                    UserList.Add( newClient );
+                    UserList.Add( login.Username, newClient );
                     userAdded = true;
                 } else
                     // Change the user's username, which in turn fires the User.OnUsernameChanged event.
-                    UserList[ newClient ].Username = packet.DeserializePacket<Login>().Username;
+                    UserList[ newClient ].Username = login.Username;
+            }
+
+            if ( !UserList.Contains( newClient ) ) {
+                if ( packet.Type.Name.ToLower() != "login" )
+                    SendTo( REQUEST.Login, newClient );
+                return newClient;
             }
 
             // If the user exists, (re)start it's MsSinceLastPing Stopwatch.
-            if ( !UserList.Contains( newClient ) )
-                return newClient;
-
             UserList[ newClient ].ResetPingWatch();
 
             if ( userAdded )
                 OnNewClientRequest?.Invoke( UserList[ newClient ] );
 
-
             return newClient;
         }
 
-        public IPEndPoint SocketReceiveFrom( out Packet packet ) => SocketReceiveFrom( out packet, 4096 );
-        public IPEndPoint SocketReceiveFrom( out Packet packet, int bufferSize ) {
-            byte[] buffer = new byte[ bufferSize ];
-            EndPoint ep = new IPEndPoint( IPAddress.Any, 0 );
-            int length = Socket.ReceiveFrom( buffer, ref ep );
-            packet = new Packet( buffer.ToList().GetRange( 0, length ) );
-
-            // Fire the OnDataReceived event with the collected data.
-            OnDataReceived?.Invoke( UserList[ ep ]?.Socket, packet, ep.ToIPEndPoint() );
-
-            return ep.ToIPEndPoint();
-        }
-
         /// <summary>
-        /// Receive one <see cref="Packet"/> and store the remote host's connection info in the given <see cref="IPEndPoint"/>.
+        /// ReceiveFrom one <see cref="Packet"/> and store the remote host's connection info in the given <see cref="IPEndPoint"/>.
         /// </summary>
         /// <param name="packet">The <see cref="Packet"/> variable that will be filled with the received <see cref="Packet"/></param>
         /// <param name="remoteEndPoint">The <see cref="IPEndPoint"/> of the remote host from which the received <see cref="Packet"/> came from</param>
         public void ReceiveFrom( out Packet packet, out IPEndPoint remoteEndPoint ) => ReceiveFrom( out packet, out remoteEndPoint, 4096 );
         /// <summary>
-        /// Receive one <see cref="Packet"/> and store the remote host's connection info in the given <see cref="IPEndPoint"/>.
+        /// ReceiveFrom one <see cref="Packet"/> and store the remote host's connection info in the given <see cref="IPEndPoint"/>.
         /// </summary>
         /// <param name="packet">The <see cref="Packet"/> variable that will be filled with the received <see cref="Packet"/></param>
         /// <param name="remoteEndPoint">The <see cref="IPEndPoint"/> of the remote host from which the received <see cref="Packet"/> came from</param>
@@ -312,13 +336,7 @@ namespace UdpNetworking {
             } );
 
             Task.Run( () => {
-                Stopwatch stpwatch = new Stopwatch();
-                stpwatch.Restart();
-                while ( true ) {
-                    if ( stpwatch.ElapsedMilliseconds < 1000 )
-                        continue;
-                    stpwatch.Restart();
-
+                while ( IsActive ) {
                     UserList.ToList().ForEach( u => {
                         if ( u.Connected && u.MsSinceLastPacket < 10000 )
                             return;
@@ -326,6 +344,7 @@ namespace UdpNetworking {
                         UserList.Remove( u );
                     } );
 
+                    Thread.Sleep( 100 );
                 }
             } );
         }

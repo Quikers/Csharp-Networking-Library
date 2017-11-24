@@ -111,11 +111,19 @@ namespace UdpNetworking {
 
         public string ID { get; private set; }
 
+        [NonSerialized] private Stopwatch stpwatch;
+        private int _msSinceLastUpdated;
+        public int MsSinceLastUpdated { get { if ( stpwatch?.ElapsedMilliseconds != null ) _msSinceLastUpdated = ( int )stpwatch?.ElapsedMilliseconds; return _msSinceLastUpdated; } private set => _msSinceLastUpdated = value; } 
+
         #endregion
 
         #region Constructors
 
-        public Pong( string pingID ) => ID = pingID;
+        public Pong( string pingID ) {
+            stpwatch = new Stopwatch();
+            ID = pingID;
+            stpwatch.Restart();
+        }
 
         #endregion
 
@@ -127,6 +135,9 @@ namespace UdpNetworking {
 
         public Login( string username ) { Username = username; }
     }
+
+    [ Serializable ]
+    public struct Disconnect { }
 
     #endregion
 

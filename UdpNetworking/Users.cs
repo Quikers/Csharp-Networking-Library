@@ -57,9 +57,9 @@ namespace UdpNetworking {
         public int MsSinceLastPacket => Socket.MsSinceLastPacket;
 
         /// <summary>The <see cref="IPEndPoint"/> that the remote host is listening for <see cref="Packet"/>s on.</summary>
-        public IPEndPoint ReceiverEndPoint { get { try { return Socket.RemoteEndPoint.ToIPEndPoint(); } catch ( Exception ) { return null; } } }
+        public IPEndPoint ReceiverEndPoint => Socket.RemoteEndPoint;
         /// <summary>The <see cref="IPEndPoint"/> that the remote host is using to send <see cref="Packet"/>s toward the server.</summary>
-        public IPEndPoint SenderEndPoint { get { try { return SenderPort > 0 ? new IPEndPoint( ReceiverEndPoint.Address, SenderPort ) : null; } catch ( Exception ) { return null; } } }
+        public IPEndPoint SenderEndPoint => SenderPort > 0 ? new IPEndPoint( ReceiverEndPoint.Address, SenderPort ) : null;
 
         #endregion
 
@@ -136,7 +136,11 @@ namespace UdpNetworking {
         public void ResetPingWatch() => Socket.ResetPingWatch();
         /// <summary>Converts the <see cref="User"/> instance into a string containing it's <seealso cref="Username"/>, <seealso cref="ID"/> and it's <seealso cref="ReceiverEndPoint"/> + <seealso cref="SenderPort"/>.</summary>
         /// <returns>The string containing the <see cref="User"/>'s information</returns>
-        public override string ToString() => $"{Username}#{ID} ({ReceiverEndPoint} & {SenderPort})";
+        public override string ToString() => ToString( false );
+        /// <summary>Converts the <see cref="User"/> instance into a string containing it's <seealso cref="Username"/>, <seealso cref="ID"/> and it's <seealso cref="ReceiverEndPoint"/> + <seealso cref="SenderPort"/>.</summary>
+        /// <param name="withID">Whether to include the <seealso cref="ID"/> of the <see cref="User"/></param>
+        /// <returns>The string containing the <see cref="User"/>'s information</returns>
+        public string ToString( bool withID ) => $"{Username}{( withID ? "#" + ID : "")} ({ReceiverEndPoint} & {SenderPort})";
 
         #endregion
 
@@ -210,9 +214,10 @@ namespace UdpNetworking {
             UdpServer.AvailablePort = user.SenderPort;
             user.Socket.Close();
 
+            _userList.Remove( user );
+
             OnUserRemoved?.Invoke( user );
             OnUserListChanged?.Invoke( user );
-            _userList.Remove( user );
         }
         public void Remove( string id ) {
             if ( !Contains( id ) )
@@ -222,9 +227,23 @@ namespace UdpNetworking {
             UdpServer.AvailablePort = user.SenderPort;
             user.Socket.Close();
 
+            _userList.Remove( user );
+
             OnUserRemoved?.Invoke( user );
             OnUserListChanged?.Invoke( user );
+        }
+        public void Remove( IPEndPoint endPoint ) {
+            if ( !Contains( endPoint ) )
+                return;
+
+            User user = this[ endPoint ];
+            UdpServer.AvailablePort = user.SenderPort;
+            user.Socket.Close();
+
             _userList.Remove( user );
+
+            OnUserRemoved?.Invoke( user );
+            OnUserListChanged?.Invoke( user );
         }
         public void Remove( UdpSocket socket ) {
             if ( !Contains( socket ) )
@@ -234,9 +253,10 @@ namespace UdpNetworking {
             UdpServer.AvailablePort = user.SenderPort;
             user.Socket.Close();
 
+            _userList.Remove( user );
+
             OnUserRemoved?.Invoke( user );
             OnUserListChanged?.Invoke( user );
-            _userList.Remove( user );
         }
 
         public void RemoveAt( int index ) {
@@ -247,9 +267,10 @@ namespace UdpNetworking {
             UdpServer.AvailablePort = user.SenderPort;
             user.Socket.Close();
 
+            _userList.RemoveAt( index );
+
             OnUserRemoved?.Invoke( user );
             OnUserListChanged?.Invoke( user );
-            _userList.RemoveAt( index );
         }
 
         #region Overrides

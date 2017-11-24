@@ -35,6 +35,12 @@ namespace UdpNetworking {
 
         #region Local Variables
 
+        #region Public Variables
+
+        public bool IsActive;
+
+        #endregion
+
         #region Private Variables
 
         [NonSerialized] private Socket _sender;
@@ -42,9 +48,12 @@ namespace UdpNetworking {
         [NonSerialized] private Stopwatch _packetWatch = new Stopwatch();
         [NonSerialized] private Stopwatch _stayAliveWatch = new Stopwatch();
 
-        private IPEndPoint _originalEP;
-        private IPEndPoint _senderEP;
-        private IPEndPoint _receiverEP;
+        private IPAddress _originalIP;
+        private int _originalPort;
+        private IPAddress _senderIP;
+        private int _senderPort;
+        private IPAddress _receiverIP;
+        private int _receiverPort;
 
         #endregion
 
@@ -60,11 +69,11 @@ namespace UdpNetworking {
         #region Properties
 
         /// <summary>The local <see cref="IPEndPoint"/> of the <see cref="UdpSocket"/>.</summary>
-        public IPEndPoint LocalEndPoint { get => _receiverEP ?? _receiver?.LocalEndPoint?.ToIPEndPoint(); set => _receiverEP = value; }
+        public IPEndPoint LocalEndPoint { get => new IPEndPoint( _receiverIP, _receiverPort ); set { _receiverIP = value.Address; _receiverPort = value.Port; } }
         /// <summary>The current <see cref="IPEndPoint"/> that the <see cref="UdpSocket"/> is connected to.</summary>
-        public IPEndPoint RemoteEndPoint { get => _senderEP ?? _sender?.RemoteEndPoint?.ToIPEndPoint(); set => _senderEP = value; }
+        public IPEndPoint RemoteEndPoint { get => new IPEndPoint( _senderIP, _senderPort ); set { _senderIP = value.Address; _senderPort = value.Port; } }
         /// <summary>The <see cref="IPEndPoint"/> that the <see cref="UdpSocket"/> was originally connected to.</summary>
-        public IPEndPoint ServerEndPoint { get => _originalEP ?? _sender?.RemoteEndPoint?.ToIPEndPoint(); set => _originalEP = value; }
+        public IPEndPoint ServerEndPoint { get => new IPEndPoint( _originalIP, _originalPort ); set { _originalIP = value.Address; _originalPort = value.Port; } }
 
         /// <summary>Whether the <see cref="UdpSocket"/> blocked the sending of <see cref="Packet"/>s to the remote host.</summary>
         public bool IsBlockingSend { get { try { return _sender.Blocking; } catch ( Exception ) { return false; } } }
@@ -155,14 +164,23 @@ namespace UdpNetworking {
         /// <param name="remoteEndPoint">The <see cref="IPEndPoint"/> of the remote host to connect to</param>
         public void Connect( IPEndPoint remoteEndPoint ) => Connect( remoteEndPoint, false );
 
+        private void OnPingSent() {
+            Ping.MsCounter.Restart();
+        }
+        private void OnPingReceived() {
+            Send( Ping.ToPong() );
+        }
+        private void OnPongReceived() {
+            Ping.MarkTime();
+        }
+
         /// <summary>
         /// Establishes a connection to a remote host.
         /// </summary>
         /// <param name="remoteEndPoint">The <see cref="IPEndPoint"/> of the remote host to connect to</param>
         /// <param name="serverSided">Whether to make this <see cref="UdpSocket"/> a server-sided client</param>
         public void Connect( IPEndPoint remoteEndPoint, bool serverSided ) {
-            if ( _receiver == null && _sender == null )
-                Close();
+            Close();
 
             _receiver = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp );
             _sender = new Socket( AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp );
@@ -180,12 +198,23 @@ namespace UdpNetworking {
                 return;
             }
 
+            // Connect the UdpSocket to the server with UDP hole punching.
+            ConnectToServer();
+
+            // Stay alive by frequently sending a ping
+            StayAlive();
+
+            // Logic to update every 10 milliseconds
+            UpdateLogic();
+        }
+
+        private void ConnectToServer() {
             Packet p = null;
             // For as long as a new ID has not been received, keep trying to get one from the server.
             while ( p == null || p.Type.Name.ToLower() != "newid" || !p.TryDeserializePacket( out NewID newID ) ) {
                 // Send a new connection request to the server with the receiver socket.
                 // This opens a port in your NAT which we will utilize to setup a server without port-forwarding.
-                Packet sendLogin = new Packet( new Login( "Quikers" ) );
+                Packet sendLogin = new Packet( new Login( "UNKNOWN" ) );
                 _receiver.SendTo( sendLogin.Serialized, RemoteEndPoint );
                 OnDataSent?.Invoke( this, sendLogin, RemoteEndPoint );
 
@@ -193,11 +222,36 @@ namespace UdpNetworking {
                 // This ID will be used to register our receiver and sender socket under the same ID on the server.
                 ReceiveFrom( out p );
             }
-            
+
+            IsActive = true;
+
             // Send the newly received ID back to the server so that the server knows that this sender-socket belongs together with our receiver-socket.
             //RemoteEndPoint = new IPEndPoint( RemoteEndPoint.Address, p.DeserializePacket<NewID>().ServerPort );
             SendTo( p, new IPEndPoint( RemoteEndPoint.Address, p.DeserializePacket<NewID>().ServerPort ) );
         }
+
+        private void StayAlive() => Task.Run( () => {
+            Thread.CurrentThread.Priority = ThreadPriority.Highest;
+            const int delay = 1000;
+            while ( IsActive ) {
+                if ( _stayAliveWatch.ElapsedMilliseconds < 100 || _stayAliveWatch.ElapsedMilliseconds < delay )
+                    Thread.Sleep( delay - ( int )_stayAliveWatch.ElapsedMilliseconds );
+
+                SendPing();
+
+                _stayAliveWatch.Restart();
+            }
+        } );
+
+        private void UpdateLogic() => Task.Run( () => {
+            Thread.CurrentThread.Priority = ThreadPriority.Highest;
+            while ( IsActive ) {
+                Thread.Sleep( 10 );
+
+                if ( Pong != null && Pong.MsSinceLastUpdated > 10000 )
+                    Connect( RemoteEndPoint );
+            }
+        } );
 
         /// <summary>
         /// Binds a <see cref="UdpSocket"/>'s receiver to an <see cref="IPEndPoint"/>.
@@ -210,8 +264,10 @@ namespace UdpNetworking {
         /// Closes the connection to the remote host and stops listening for incoming <see cref="Packet"/>s.
         /// </summary>
         public void Close() {
-            _sender.Close();
-            _receiver.Close();
+            IsActive = false;
+
+            _sender?.Close();
+            _receiver?.Close();
 
             _sender = null;
             _receiver = null;
@@ -226,68 +282,16 @@ namespace UdpNetworking {
         /// <summary>
         /// Sends a <see cref="Ping"/> to the remote host, expecting a <see cref="Pong"/> with the same ID back.
         /// </summary>
-        public bool SendPing() => SendPingTo( RemoteEndPoint );
-        public bool SendPingTo( IPEndPoint remoteEndPoint ) {
+        public void SendPing() => SendPingTo( RemoteEndPoint );
+        public void SendPingTo( IPEndPoint remoteEndPoint ) {
             // If no ping has been sent or if the last sent ping and received pong have the same ID
             if ( Ping == null || Ping.ID == Pong.ID )
                 // Add a new ping, else send the old ping again
                 Ping = new Ping();
 
-            // Send the handled ping
             Ping.MsCounter.Restart();
+            // Send the handled ping
             SendTo( Ping, remoteEndPoint );
-
-            Task<bool> task = new Task<bool>( () => {
-                Thread.Sleep( 10 );
-                if ( Pong != null && Ping.ID == Pong.ID ) {
-                    return true;
-                }
-                Connect( RemoteEndPoint );
-                return false;
-            } );
-            task.Start();
-            task.Wait();
-
-            return task.Result;
-        }
-
-        /// <summary>
-        /// Sends a <see cref="Ping"/> to the remote host 10 times in 1 second to make sure that the connection stays alive.
-        /// </summary>
-        /// <returns>Whether the <see cref="Ping.ID"/> was returned as a <see cref="Pong.ID"/></returns>
-        public bool StayAlive() => StayAlive( 10, 1000, true );
-        /// <summary>
-        /// Sends a <see cref="Ping"/> to the remote host a given amount of tries with each having a delay of a given value in milliseconds to make sure that the connection stays alive.
-        /// </summary>
-        /// <param name="tries">The amount of <see cref="Ping"/>s to send in total</param>
-        /// <returns>Whether the <see cref="Ping.ID"/> was returned as a <see cref="Pong.ID"/></returns>
-        public bool StayAlive( int tries ) => StayAlive( tries, 1000, true );
-        /// <summary>
-        /// Sends a <see cref="Ping"/> to the remote host a given amount of tries with each having a delay of a given value in milliseconds to make sure that the connection stays alive.
-        /// </summary>
-        /// <param name="tries">The amount of <see cref="Ping"/>s to send in total</param>
-        /// <param name="delay">The amount of milliseconds to wait after every ping</param>
-        /// <returns>Whether the <see cref="Ping.ID"/> was returned as a <see cref="Pong.ID"/></returns>
-        public bool StayAlive( int tries, int delay ) => StayAlive( tries, delay, true );
-        /// <summary>
-        /// Sends a <see cref="Ping"/> to the remote host a given amount of tries with each having a delay of a given value in milliseconds to make sure that the connection stays alive.
-        /// </summary>
-        /// <param name="tries">The amount of <see cref="Ping"/>s to send in total</param>
-        /// <param name="delay">The amount of milliseconds to wait after every ping</param>
-        /// <param name="blockSpam">Whether to prevent <see cref="Ping"/>-spamming (100ms minimal delay between unique <see cref="Ping"/>s)</param>
-        /// <returns>Whether the <see cref="Ping.ID"/> was returned as a <see cref="Pong.ID"/></returns>
-        private bool StayAlive( int tries, int delay, bool blockSpam ) {
-            while ( tries-- > 0 ) {
-                if ( blockSpam && _stayAliveWatch.ElapsedMilliseconds < 100 || _stayAliveWatch.ElapsedMilliseconds < delay )
-                    Thread.Sleep( delay - (int)_stayAliveWatch.ElapsedMilliseconds );
-                _stayAliveWatch.Restart();
-
-                if ( SendPing() )
-                    return true;
-
-                blockSpam = false;
-            }
-            return false;
         }
 
         /// <summary>
@@ -322,7 +326,7 @@ namespace UdpNetworking {
         /// <param name="packet">The <see cref="Packet"/> to send</param>
         /// <param name="remoteHost">The <see cref="IPEndPoint"/> to send the <see cref="Packet"/> to</param>
         public void SendTo( Packet packet, IPEndPoint remoteHost ) {
-            _sender.SendTo( packet.Serialized, remoteHost );
+            _sender?.SendTo( packet.Serialized, remoteHost );
 
             OnDataSent?.Invoke( this, packet, remoteHost );
         }
@@ -362,27 +366,25 @@ namespace UdpNetworking {
             if ( packet == null )
                 return ep;
             OnDataReceived?.Invoke( this, packet, RemoteEndPoint );
-            
+
             if ( packet.TypeName == "request" && packet.DeserializePacket<REQUEST>() == REQUEST.Login )
                 Connect( ServerEndPoint );
             switch ( packet.Type.Name.ToLower() ) {
                 default: /* Ignored */ break;
                 case "ping":
-                    Send( packet.DeserializePacket<Ping>().ToPong() );
+                    OnPingReceived();
                     break;
                 case "pong":
-                    Ping.MarkTime();
                     Pong = packet.DeserializePacket<Pong>();
+                    OnPongReceived();
                     break;
             }
-            
+
             ResetPingWatch();
-            
+
             // Return the IPEndPoint.
             return ep.ToIPEndPoint();
         }
-
-        private Timer t;
 
         public IPEndPoint ReceiveFromBasic( out Packet packet ) => ReceiveFromBasic( out packet, 4096 );
         public IPEndPoint ReceiveFromBasic( out Packet packet, int bufferSize ) {
@@ -457,6 +459,7 @@ namespace UdpNetworking {
         /// </summary>
         /// <param name="bufferSize">The maximum size of the <see cref="Packet"/> to receive in <see cref="byte"/>s</param>
         public void StartReceiving( int bufferSize ) => Task.Run( () => {
+            Thread.CurrentThread.Priority = ThreadPriority.Highest;
             // While the receiver is active.
             while ( _receiver != null )
                 // Try to receive a packet.

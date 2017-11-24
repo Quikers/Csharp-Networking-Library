@@ -16,6 +16,8 @@ namespace UdpNetworking {
 
         /// <summary>Fires when a new <see cref="UdpSocket"/> has connected.</summary>
         public event UserEventHandler OnNewClientRequest;
+        /// <summary>Fires when a <see cref="UdpSocket"/> has disconnected.</summary>
+        public event UserEventHandler OnClientDisconnected { add => UserList.OnUserRemoved += value; remove => UserList.OnUserRemoved -= value; }
         private event DataEventHandler _onDataReceived;
         /// <summary>Fires when a new <see cref="Packet"/> has been received.</summary>
         public event DataEventHandler OnDataReceived {
@@ -267,6 +269,11 @@ namespace UdpNetworking {
 
             if ( userAdded )
                 OnNewClientRequest?.Invoke( UserList[ newClient ] );
+
+            // If the received packet is of type disconnect.
+            if ( packet.Type.Name.ToLower() == "disconnect" )
+                // Remove the user
+                UserList.Remove( newClient );
 
             return newClient;
         }
